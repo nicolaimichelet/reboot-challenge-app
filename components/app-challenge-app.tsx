@@ -1,145 +1,350 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Send, Plus, AlertTriangle, RefreshCw, Home, Book, Trophy, User, Settings, Clock, FrownIcon, SmileIcon, MehIcon } from 'lucide-react'
+import { Send, Plus, AlertTriangle, RefreshCw, Home, BookOpen, Trophy, Clock, Star, Award, Shield, Lock, Zap, Crown } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+
+interface Participant {
+  name: string;
+  status: string;
+}
+
+interface Achievement {
+  name: string;
+  description: string;
+  icon: React.ElementType;
+  color: string;
+  completed: boolean;
+}
+
+interface PastChallenge {
+  name: string;
+  status: string;
+  date: string;
+}
+
+interface Reward {
+  name: string;
+  description: string;
+}
+
+interface Challenge {
+  name: string;
+  type: string;
+  description: string;
+}
+
+
+interface ChallengeAppState {
+  step: number;
+  friendPhone: string;
+  challengeStarted: boolean;
+  currentTab: string;
+  friendAccepted: boolean;
+  participants: Participant[];
+  currentQuote: string;
+  selectedReward: string;
+  userFullName: string;
+  friendName: string;
+}
 
 export function ChallengeAppComponent() {
-  const [step, setStep] = useState(0)
-  const [friendPhone, setFriendPhone] = useState('')
-  const [challengeStarted, setChallengeStarted] = useState(false)
-  const [customChallengeClicks, setCustomChallengeClicks] = useState(0)
-  const [currentTab, setCurrentTab] = useState('home')
+  const [state, setState] = useState<ChallengeAppState>({
+    step: 0,
+    friendPhone: '+47',
+    challengeStarted: false,
+    currentTab: 'home',
+    friendAccepted: false,
+    participants: [{ name: "Erik", status: "aktiv" }],
+    currentQuote: '',
+    selectedReward: '',
+    userFullName: '',
+    friendName: ''
+  });
+
+  const [pledgeSigned, setPledgeSigned] = useState(false);
+
+  const challenge: Challenge = {
+    name: '7-dager uten Sosiale Medier',
+    type: 'socialMedia-detox',
+    description: 'Frigjør deg fra sosiale medier og gjenoppdage livet utenfor skjermen.'
+  }
 
   const challengeRules = [
-    "Avoid All Social Media: Stay off Facebook, Instagram, X (formerly Twitter), TikTok, and Snapchat for the entire 7 days.",
-    "Limit Screen Time: Set a daily limit of 2 hours for overall screen time (excluding necessary work or school-related use).",
-    "Check-Ins: Have a check-in with your friend every other day via group chat or video call to share progress and support each other.",
-    "Mutual Goal: Set a mutual goal with your friend, such as spending more time on hobbies, getting better sleep, or improving focus.",
-    "Retrospective: At the end of the challenge, have a reflection discussion to share how you felt and what changes you noticed.",
-    "Reward: Plan a reward for completing the challenge, like a special outing or treat.",
-    "Start Date: The challenge begins 1 day after one or more friends accept your invitation."
+    "Unngå alle sosiale medier: Hold deg unna Facebook, Instagram, X, TikTok og Snapchat i 7 dager.",
+    "Begrens skjermtid: Sett en daglig grense på 2 timer for total skjermtid (unntatt nødvendig arbeid eller skolerelatert bruk).",
+    "Felles mål: Sett et felles mål sammen - bruk mer tid på hobbyer, få bedre søvn eller endelig les i den boken.",
+    "Check-in: Ha en 10 minutter check-in med vennen din annenhver dag via FaceTime.",
+    "Tilbakeblikk: På slutten av utfordringen, reflekter hvordan du føler deg og hva dere oppnådde.",
+    "Belønning: Planlegg en belønning for å fullføre utfordringen. Den som taper betaler!",
+    "Ingen taper: Om begge klarer utfordringen, gratulerer! Hva er vel bedre belønning enn det? Neste gang kanskje prøv en tøffere utfordring.",
+    "Startdato: Utfordringen starter så fort din venn aksepterer og avgir sitt løfte."
   ]
 
-  const rewardIdeas = [
-    "A day trip to a nearby town or attraction",
-    "Trying out a new restaurant together",
-    "Attending a concert or live event",
-    "A spa day or relaxation experience",
-    "Learning a new skill together (cooking class, art workshop, etc.)",
-    "Outdoor adventure (hiking, kayaking, etc.)",
-    "Movie marathon with favorite snacks",
-    "Volunteer together for a cause you both care about"
+  const rewards: Reward[] = [
+    { name: "En hyggelig middag", description: "Den som taper, spanderer en hyggelig middag på vinneren." },
+    { name: "Kinobilletter", description: "Taperen spanderer kinobilletter" },
+    { name: "Hjemmelaget middag", description: "Taperen lager middag til vinneren." },
+    { name: "Glede gavekort", description: "Taperen sender Glede gavekort til vinneren" },
+    { name: "Spa-dag", description: "En avslappende spa-dag for vinneren." },
+    { name: "Personlig tjeneste", description: "Taperen må gjøre en personlig tjeneste" },
+    { name: "Valgfritt", description: "Dere avtaler en egen belønning" }
   ]
 
-  const participants = [
-    { name: "You", status: "active", feeling: "happy" },
-    { name: "Sarah", status: "active", feeling: "neutral" },
-    { name: "John", status: "gave up", feeling: "sad" },
-    { name: "Emma", status: "active", feeling: "happy" }
+  const achievements: Achievement[] = [
+    { name: "Første Steg", description: "Fullfør din første 7-dagers detox", icon: Star, color: "text-yellow-500", completed: false },
+    { name: "Hat Trick", description: "Fullfør 3 detox-utfordringer", icon: Award, color: "text-green-500", completed: false },
+    { name: "High Five", description: "Fullfør 5 detox-utfordringer", icon: Shield, color: "text-blue-500", completed: false},
+    { name: "Locked-in", description: "Fullfør 10 detox-utfordringer", icon: Lock, color: "text-purple-500", completed: false },
+    { name: "Detox Mester", description: "Fullfør 20 detox-utfordringer", icon: Zap, color: "text-orange-500", completed: false },
+    { name: "Detox Legende", description: "Fullfør 50 detox-utfordringer", icon: Crown, color: "text-red-500", completed: false },
+    { name: "Digital Frihet", description: "Fullfør 100 detox-utfordringer", icon: Trophy, color: "text-indigo-500", completed: false }
   ]
 
-  const pastChallenges = [
-    { name: "30-Day Fitness Challenge", status: "Completed", date: "May 2023" },
-    { name: "Book Reading Marathon", status: "Failed", date: "March 2023" },
-    { name: "Healthy Eating Month", status: "Completed", date: "January 2023" }
+  const pastChallenges: PastChallenge[] = [
+    { name: "7-dagers digital detox", status: "Mislyktes", date: "Juni 2024" },
+    { name: "7-dagers digital detox", status: "Mislyktes", date: "April 2023" },
+    { name: "7-dagers digital detox", status: "Mislyktes", date: "Februar 2022" }
   ]
 
-  const handleStartChallenge = () => {
-    setStep(1)
-  }
+  const motivationalQuotes = [
+    "The only way to do great work is to love what you do.",
+    "The journey of a thousand miles begins with a single step.",
+    "Believe you can and you're halfway there.",
+    "The future belongs to those who believe in the beauty of their dreams.",
+    "Challenges are what make life interesting. Overcoming them is what makes life meaningful."
+  ];
 
-  const handleInviteFriend = () => {
-    // In a real app, this would send an SMS or iMessage
-    alert(`Invitation sent to ${friendPhone}. The challenge will start when your friend accepts.`)
-    setChallengeStarted(true)
-    setCurrentTab('home')
-  }
+  const setCurrentQuote = (quote: string) => {
+    setState(prev => ({ ...prev, currentQuote: quote }));
+  };
 
-  const handleCustomChallengeClick = () => {
-    setCustomChallengeClicks(prev => prev + 1)
-    alert("Thanks for your interest! We'll notify you when custom challenges are available.")
-  }
+  useEffect(() => {
+    setCurrentQuote(motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)]);
+  }, [state.friendAccepted]);
 
-  const startChallenge = () => {
-    setChallengeStarted(true)
-    setCurrentTab('home')
-  }
 
-  const giveUp = () => {
-    if (confirm("Are you sure you want to give up the challenge?")) {
-      alert("Don't worry, you can always try again!")
-      setChallengeStarted(false)
-      setStep(0)
-    }
+  const resetApp = useCallback(() => {
+    setState({
+      step: 0,
+      friendPhone: '+47',
+      challengeStarted: false,
+      currentTab: 'home',
+      friendAccepted: false,
+      participants: [{ name: "Erik", status: "aktiv" }],
+      currentQuote: '',
+      selectedReward: '',
+      userFullName: '',
+      friendName: ''
+    });
+  }, []);
+
+  const isValidPhoneNumber = (phone: string) => {
+    const phoneRegex = /^\+47\d{8}$/
+    return phoneRegex.test(phone)
   }
 
   const renderContent = () => {
-    switch (currentTab) {
-      case 'home':
+    switch (state.step) {
+      case 0:
+        return (
+          <div className="space-y-6 text-center">
+            <h2 className="text-2xl font-semibold text-rose-600 dark:text-rose-300">Klar for en utfordring?</h2>
+            <p className="text-gray-800 dark:text-gray-200">
+              Gjennomfør 7 dager uten Sosiale Medier.
+            </p>
+            <div className="space-y-4">
+              <div className="flex items-center justify-center space-x-2 text-rose-600 dark:text-rose-400">
+                <RefreshCw className="h-5 w-5" />
+                <span className="font-medium">Løsriv deg selv fra avhengigheten</span>
+              </div>
+              <div className="flex items-center justify-center space-x-2 text-rose-600 dark:text-rose-400">
+                <Send className="h-5 w-5" />
+                <span className="font-medium">Gjør ting med venner i virkeligheten</span>
+              </div>
+              <div className="flex items-center justify-center space-x-2 text-rose-600 dark:text-rose-400">
+                <Plus className="h-5 w-5" />
+                <span className="font-medium">Få mer tid til det som betyr noe</span>
+              </div>
+            </div>
+            <Button onClick={() => setState(prev => ({ ...prev, step: 1 }))} className="w-full bg-rose-500 hover:bg-rose-600 text-white text-lg py-6">
+              Jeg tar utfordringen!
+            </Button>
+          </div>
+        )
+      case 1:
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-semibold text-blue-700 dark:text-blue-300">
-              {challengeStarted ? "Challenge Progress" : "Waiting for your friend(s)"}
-            </h2>
-            {challengeStarted ? (
-              <div className="space-y-4">
-                <div className="bg-blue-50 dark:bg-blue-900 p-6 rounded-lg">
-                  <h3 className="text-xl font-medium text-blue-800 dark:text-blue-200 mb-2">Day 3 of 7</h3>
-                  <Progress value={42} className="w-full" />
-                  <p className="mt-2 text-blue-600 dark:text-blue-300">You're doing great! Keep it up!</p>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-lg font-medium text-blue-700 dark:text-blue-300">How everyone's feeling:</h3>
-                  <div className="flex justify-around">
-                    {participants.filter(p => p.status === "active").map((participant, index) => (
-                      <div key={index} className="text-center">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{participant.name}</p>
-                        {participant.feeling === "happy" && <SmileIcon className="mx-auto h-6 w-6 text-green-500" />}
-                        {participant.feeling === "neutral" && <MehIcon className="mx-auto h-6 w-6 text-yellow-500" />}
-                        {participant.feeling === "sad" && <FrownIcon className="mx-auto h-6 w-6 text-red-500" />}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-gray-600 dark:text-gray-300">We'll notify you when your friend(s) accepts the challenge. In the meantime, here are some tips to prepare:</p>
-                <ul className="list-disc pl-5 space-y-2 text-gray-600 dark:text-gray-300">
-                  <li>Remove Temptations: Temporarily delete social media apps from your devices to reduce temptation.</li>
-                  <li>Set Boundaries: Inform friends and family about your detox so they can support you and understand your reduced online presence.</li>
-                  <li>Engage in Offline Activities: Plan activities that don't involve screens, such as reading, exercising, or spending time outdoors.</li>
-                </ul>
-                <Button onClick={startChallenge} className="w-full bg-blue-500 hover:bg-blue-600 text-white">Start Challenge</Button>
-              </div>
-            )}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-blue-700 dark:text-blue-300">Participants</h3>
-              <ul className="space-y-2">
-                {participants.map((participant, index) => (
-                  <li key={index} className={`flex justify-between items-center p-2 rounded ${participant.status === "active" ? "bg-green-100 dark:bg-green-900" : "bg-red-100 dark:bg-red-900"}`}>
-                    <span>{participant.name}</span>
-                    <span>{participant.status === "active" ? "Active" : "Gave up"}</span>
-                  </li>
+            <h2 className="text-2xl font-semibold text-rose-600 dark:text-rose-300">Din Utfordring: {challenge.name}</h2>
+            <p className="text-gray-800 dark:text-gray-200">{challenge.description}</p>
+            <div className="mt-2 p-4 bg-rose-50 dark:bg-rose-900 rounded-lg max-h-60 overflow-y-auto">
+              <h4 className="font-semibold mb-2 text-rose-600 dark:text-rose-300">Regler:</h4>
+              <ul className="list-disc pl-5 space-y-2 text-gray-800 dark:text-gray-200">
+                {challengeRules.map((rule, index) => (
+                  <li key={index}>{rule}</li>
                 ))}
               </ul>
             </div>
-            {challengeStarted && (
-              <Button onClick={giveUp} variant="destructive" className="w-full">I give up</Button>
+            <Alert variant="default">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Advarsel</AlertTitle>
+              <AlertDescription>
+                Ærlighet og integritet er avgjørende for denne utfordringen. Vær ærlig med deg selv om din fremgang og eventuelle tilbakefall.
+              </AlertDescription>
+            </Alert>
+            <Button onClick={() => setState(prev => ({ ...prev, step: 2 }))} className="w-full bg-rose-500 hover:bg-rose-600 text-white">
+              Jeg forstår reglene
+            </Button>
+          </div>
+        )
+      case 2:
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold text-rose-600 dark:text-rose-300">Avlegg ditt løfte</h2>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="pledge" className="text-rose-600 dark:text-rose-300">Løfte</Label>
+                <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                  <p className="text-gray-800 dark:text-gray-200">
+                    Jeg, <Input
+                      className="inline-block w-40 mx-1"
+                      placeholder="ditt fulle navn"
+                      onChange={(e) => setState(prev => ({ ...prev, userFullName: e.target.value }))}
+                    />, lover til <Input
+                      className="inline-block w-40 mx-1"
+                      placeholder="din venns navn"
+                      onChange={(e) => setState(prev => ({ ...prev, friendName: e.target.value }))}
+                    /> at jeg respekterer reglene for utfordringen og vil være ærlig. Hvis jeg mislykkes vil jeg innrømme det og jeg skylder min venn den avtalte belønningen.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reward-select" className="text-rose-600 dark:text-rose-300">Velg belønning</Label>
+                <Select onValueChange={(value) => setState(prev => ({ ...prev, selectedReward: value }))}>
+                  <SelectTrigger id="reward-select">
+                    <SelectValue placeholder="Velg en belønning" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {rewards.map((reward, index) => (
+                      <SelectItem key={index} value={reward.name}>
+                        {reward.name}: {reward.description}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="friend-phone" className="text-rose-600 dark:text-rose-300">Vennens telefonnummer</Label>
+                <Input
+                  id="friend-phone"
+                  type="tel"
+                  placeholder="+47 xxxxxxxx"
+                  value={state.friendPhone}
+                  onChange={(e) => setState(prev => ({ ...prev, friendPhone: e.target.value }))}
+                  className={`border-gray-300 dark:border-gray-600 focus:ring-rose-500 dark:focus:ring-rose-400 text-gray-800 dark:text-gray-200 ${
+                    state.friendPhone && !isValidPhoneNumber(state.friendPhone) ? 'border-2 border-rose-400 dark:border-rose-400' : ''
+                  }`}
+                />
+              </div>
+              <Input
+                placeholder="Skriv ditt navn her for å signere"
+                className="border-rose-200 dark:border-rose-700 focus:ring-rose-500 dark:focus:ring-rose-400 text-gray-800 dark:text-gray-200"
+                onChange={(e) => setPledgeSigned(e.target.value.trim().length > 0)}
+              />
+              <Button
+                onClick={() => {
+                  if (isValidPhoneNumber(state.friendPhone) && state.selectedReward && state.userFullName && state.friendName) {
+                    setState(prev => ({ ...prev, challengeStarted: true, currentTab: 'home' }))
+                  } else {
+                    alert("Vennligst fyll ut all informasjon før du fortsetter.")
+                  }
+                }}
+                disabled={!pledgeSigned}
+                className="w-full bg-rose-500 hover:bg-rose-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Jeg starter ufordringen og sender mitt løfte
+              </Button>
+            </div>
+          </div>
+        )
+      default:
+        return null
+    }
+  }
+
+  const renderChallengeContent = () => {
+    switch (state.currentTab) {
+      case 'home':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold text-rose-600 dark:text-rose-300">
+              7 dager uten Sosiale Medier
+            </h2>
+            <div className="bg-rose-100 dark:bg-rose-900 p-6 rounded-lg">
+              {state.friendAccepted ? (
+                <>
+                  <h3 className="text-xl font-medium text-rose-800 dark:text-rose-200 mb-2">Dag 1 av 7</h3>
+                  <Progress value={0} className="w-full" />
+                  <p className="mt-2 text-rose-600 dark:text-rose-300">Utfordringen har startet! Lykke til!</p>
+                </>
+              ) : (
+                <p className="text-rose-800 dark:text-rose-200">Venter på at din venn aksepterer utfordringen! Mens du venter les reglene på nytt.</p>
+              )}
+            </div>
+            {state.friendAccepted && (
+              <div className="bg-gradient-to-r from-yellow-100 to-yellow-200 dark:from-yellow-800 dark:to-yellow-900 p-4 rounded-lg shadow-md border border-yellow-300 dark:border-yellow-600">
+                <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Avtalt belønning:</h3>
+                <p className="text-yellow-900 dark:text-yellow-100">{state.selectedReward}</p>
+              </div>
+            )}
+            {state.friendAccepted && (
+              <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg mt-4">
+                <p className="text-gray-800 dark:text-gray-200 italic">&quot;{state.currentQuote}&quot;</p>
+              </div>
+            )}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-rose-600 dark:text-rose-300">Deltakere</h3>
+              <ul className="space-y-2">
+                {state.participants.map((participant, index) => (
+                  <li key={index} className="flex justify-between items-center p-2 rounded bg-emerald-400 text-white">
+                    <span>{participant.name}</span>
+                    <span>{participant.status}</span>
+                  </li>
+                ))}
+                {!state.friendAccepted && (
+                  <li className="flex justify-between items-center p-2 rounded bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300">
+                    <span>Venter på venn...</span>
+                  </li>
+                )}
+              </ul>
+            </div>
+            {!state.friendAccepted && (
+              <Button onClick={() => setState(prev => ({ ...prev, friendAccepted: true, participants: [...prev.participants, { name: "Nicolai", status: "aktiv" }] }))} className="w-full bg-rose-500 hover:bg-rose-600 text-white">
+                Simuler venn aksepterer (For demo)
+              </Button>
+            )}
+            {state.friendAccepted && (
+              <Button onClick={() => {
+                if (window.confirm('Er du sikker på at du vil gi opp challengen?')) {
+                  resetApp()
+                }
+              }} variant="destructive" className="w-full bg-rose-500 hover:bg-rose-600 text-white">
+                Jeg gir opp
+              </Button>
             )}
           </div>
         )
       case 'rules':
         return (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Challenge Rules</h2>
-            <ul className="list-disc pl-5 space-y-2 text-gray-600 dark:text-gray-300">
+            <h2 className="text-xl font-semibold text-rose-600 dark:text-rose-300">Regler</h2>
+            <ul className="list-disc pl-5 space-y-2 text-gray-800 dark:text-gray-200">
               {challengeRules.map((rule, index) => (
                 <li key={index}>{rule}</li>
               ))}
@@ -148,141 +353,75 @@ export function ChallengeAppComponent() {
         )
       case 'rewards':
         return (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Rewards</h2>
-            <p className="text-gray-600 dark:text-gray-300">Complete the challenge to unlock your reward! Here are some ideas:</p>
-            <ul className="list-disc pl-5 space-y-2 text-gray-600 dark:text-gray-300">
-              {rewardIdeas.map((idea, index) => (
-                <li key={index}>{idea}</li>
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold text-rose-600 dark:text-rose-300">Prestasjoner</h2>
+            <div className="space-y-4">
+              {achievements.map((achievement, index) => (
+                <div key={index} className={`bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md flex items-center space-x-4 ${achievement.completed ? '' : 'opacity-50'}`}>
+                  <achievement.icon className={`h-10 w-10 ${achievement.completed ? achievement.color : 'text-gray-400'}`} />
+                  <div>
+                    <h3 className="font-semibold text-gray-800 dark:text-gray-200">{achievement.name}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{achievement.description}</p>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
         )
       case 'past-challenges':
         return (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Past Challenges</h2>
+            <h2 className="text-xl font-semibold text-rose-600 dark:text-rose-300">Tidligere Utfordringer</h2>
             <ul className="space-y-2">
               {pastChallenges.map((challenge, index) => (
-                <li key={index} className={`p-2 rounded ${challenge.status === "Completed" ? "bg-green-100 dark:bg-green-900" : "bg-red-100 dark:bg-red-900"}`}>
+                <li key={index} className={`p-2 rounded ${challenge.status === "Fullført" ? "bg-emerald-400 text-white" : "bg-red-400 text-white"}`}>
                   <div className="flex justify-between">
                     <span>{challenge.name}</span>
                     <span>{challenge.status}</span>
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">{challenge.date}</div>
+                  <div className="text-sm text-gray-200">{challenge.date}</div>
                 </li>
               ))}
             </ul>
           </div>
         )
       default:
-        return (
-          <div className="space-y-6 text-center">
-            <h2 className="text-2xl font-semibold text-blue-700 dark:text-blue-300">Ready for a digital detox?</h2>
-            <p className="text-gray-600 dark:text-gray-300">
-              Join our 7-day challenge to break free from social media and rediscover life beyond the screen.
-            </p>
-            <div className="space-y-4">
-              <div className="flex items-center justify-center space-x-2 text-blue-600 dark:text-blue-400">
-                <RefreshCw className="h-5 w-5" />
-                <span className="font-medium">Reset your digital habits</span>
-              </div>
-              <div className="flex items-center justify-center space-x-2 text-blue-600 dark:text-blue-400">
-                <Send className="h-5 w-5" />
-                <span className="font-medium">Connect with friends in real life</span>
-              </div>
-              <div className="flex items-center justify-center space-x-2 text-blue-600 dark:text-blue-400">
-                <Plus className="h-5 w-5" />
-                <span className="font-medium">Gain more time for what matters</span>
-              </div>
-            </div>
-            <Button onClick={handleStartChallenge} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-lg py-6">
-              Start Your Reboot
-            </Button>
-          </div>
-        )
+        return null
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md bg-white dark:bg-gray-800 shadow-xl">
-        <CardHeader className="bg-blue-500 text-white dark:bg-blue-600 rounded-t-lg">
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-gray-100 to-rose-100 dark:from-gray-900 dark:via-rose-900 dark:to-gray-800 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md bg-white dark:bg-gray-800 shadow-xl border-2 border-rose-400">
+        <CardHeader className="bg-gradient-to-r from-rose-500 to-rose-600 text-white rounded-t-lg">
           <div className="flex justify-between items-center">
-            <CardTitle className="text-3xl font-bold flex items-center">
+            <CardTitle className="text-3xl font-bold flex items-center cursor-pointer" onClick={resetApp}>
               <RefreshCw className="mr-2 h-6 w-6" />
               Reboot
             </CardTitle>
-            <div className="flex space-x-2">
-              <Button variant="ghost" size="icon">
-                <User className="h-5 w-5" />
-              </Button>
-              <Button variant="ghost" size="icon">
-                <Settings className="h-5 w-5" />
-              </Button>
-            </div>
           </div>
-          <CardDescription className="text-blue-100">Reclaim your life, one day at a time</CardDescription>
+          <CardDescription className="text-rose-100">Ta tilbake livet ditt, en dag om gangen</CardDescription>
         </CardHeader>
-        <CardContent className="mt-6 space-y-6">
-          {step === 0 && renderContent()}
-          {step === 1 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">7-Day Digital Detox Challenge</h2>
-              <p className="text-gray-600 dark:text-gray-300">Here are the rules for the challenge:</p>
-              <ul className="list-disc pl-5 space-y-2 text-gray-600 dark:text-gray-300">
-                {challengeRules.map((rule, index) => (
-                  <li key={index}>{rule}</li>
-                ))}
-              </ul>
-              <Alert className="bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700">
-                <AlertTriangle className="h-4 w-4 text-blue-500 dark:text-blue-300" />
-                <AlertTitle className="text-blue-700 dark:text-blue-300">Trust is Key</AlertTitle>
-                <AlertDescription className="text-blue-600 dark:text-blue-200">
-                  This challenge is built on trust between friends. While it&apos;s possible to cheat, doing so defeats the purpose. The app is here to support your growth, not to police you.
-                </AlertDescription>
-              </Alert>
-              <Button onClick={() => setStep(2)} className="w-full bg-blue-500 hover:bg-blue-600 text-white">I Understand</Button>
-            </div>
-          )}
-          {step === 2 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-300">Invite a friend to join your challenge</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">The challenge will start when your friend accepts the invitation. We&apos;ll notify you when that happens.</p>
-              <div className="space-y-2">
-                <Label htmlFor="friend-phone" className="text-blue-600 dark:text-blue-300">Friend&apos;s Phone Number</Label>
-                <Input
-                  id="friend-phone"
-                  type="tel"
-                  placeholder="Enter phone number"
-                  value={friendPhone}
-                  onChange={(e) => setFriendPhone(e.target.value)}
-                  className="border-blue-200 dark:border-blue-700 focus:ring-blue-500 dark:focus:ring-blue-400"
-                />
-              </div>
-              <Button onClick={handleInviteFriend} disabled={!friendPhone} className="w-full bg-blue-500 hover:bg-blue-600 text-white">
-                <Send className="mr-2 h-4 w-4" /> Invite Friend
-              </Button>
-            </div>
-          )}
+        <CardContent className="mt-6 space-y-6 text-gray-800 dark:text-gray-200">
+          {state.challengeStarted ? renderChallengeContent() : renderContent()}
         </CardContent>
-        {(challengeStarted || step > 0) && (
-          <div className="flex justify-around items-center p-4 bg-gray-100 dark:bg-gray-700 rounded-b-lg">
-            <Button variant="ghost" onClick={() => setCurrentTab('home')} className={currentTab === 'home' ? 'text-blue-500' : ''}>
-              <Home className="h-5 w-5" />
-              <span className="sr-only">Home</span>
+        {state.challengeStarted && (
+          <div className="flex justify-around items-center p-4 bg-gray-200 dark:bg-gray-700 rounded-b-lg">
+            <Button variant="ghost" onClick={() => setState(prev => ({ ...prev, currentTab: 'home' }))} className={state.currentTab === 'home' ? 'text-rose-600' : 'text-gray-800 dark:text-gray-200'}>
+              <Home className="h-12 w-12" />
+              <span className="sr-only">Utfordring</span>
             </Button>
-            <Button variant="ghost" onClick={() => setCurrentTab('rules')} className={currentTab === 'rules' ? 'text-blue-500' : ''}>
-              <Book className="h-5 w-5" />
-              <span className="sr-only">Rules</span>
+            <Button variant="ghost" onClick={() => setState(prev => ({ ...prev, currentTab: 'rules' }))} className={state.currentTab === 'rules' ? 'text-rose-600' : 'text-gray-800 dark:text-gray-200'}>
+              <BookOpen className="h-12 w-12" />
+              <span className="sr-only">Regler</span>
             </Button>
-            <Button variant="ghost" onClick={() => setCurrentTab('rewards')} className={currentTab === 'rewards' ? 'text-blue-500' : ''}>
-              <Trophy className="h-5 w-5" />
-              <span className="sr-only">Rewards</span>
+            <Button variant="ghost" onClick={() => setState(prev => ({ ...prev, currentTab: 'rewards' }))} className={state.currentTab === 'rewards' ? 'text-rose-600' : 'text-gray-800 dark:text-gray-200'}>
+              <Trophy className="h-12 w-12" />
+              <span className="sr-only">Prestasjoner</span>
             </Button>
-            <Button variant="ghost" onClick={() => setCurrentTab('past-challenges')} className={currentTab === 'past-challenges' ? 'text-blue-500' : ''}>
-              <Clock className="h-5 w-5" />
-              <span className="sr-only">Past Challenges</span>
+            <Button variant="ghost" onClick={() => setState(prev => ({ ...prev, currentTab: 'past-challenges' }))} className={state.currentTab === 'past-challenges' ? 'text-rose-600' : 'text-gray-800 dark:text-gray-200'}>
+              <Clock className="h-12 w-12" />
+              <span className="sr-only">Tidligere Utfordringer</span>
             </Button>
           </div>
         )}
